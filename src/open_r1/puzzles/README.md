@@ -17,7 +17,7 @@ After `pip install`ing the open-r1 repo, you can very quickly get started
 Solve for a in the following equation:
 
 -9a + 2 = 2
-# To score a model output, use task.validate()
+# To score a model output, use task.verify()
 >>> task.verify("a = 0", task_instance["ground_truth"])
 1.0
 
