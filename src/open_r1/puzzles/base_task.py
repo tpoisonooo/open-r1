@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from random import randint
-from datasets import Dataset
 
 import numpy as np
+from datasets import Dataset
 
 from .base_config import BaseConfig
 

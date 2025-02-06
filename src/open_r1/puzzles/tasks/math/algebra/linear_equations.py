@@ -47,11 +47,10 @@ class LinearEquationTask(BaseTask):
         # Look for number-like sequences
         numbers = re.findall(r"(\d+|\d+\.\d+)", output)
         if not numbers:
-            return 0.  # If we can't find a number, it's incorrect
+            return 0.0  # If we can't find a number, it's incorrect
         try:
             # We assume the last number in the text is the model's answer, just in case any CoT is in there
             prediction = float(numbers[-1])
         except ValueError:
-            return 0.  # If we can't parse a number, it's incorrect
+            return 0.0  # If we can't parse a number, it's incorrect
         return float(prediction == answer)
-
