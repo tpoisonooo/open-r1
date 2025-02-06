@@ -9,18 +9,20 @@ After `pip install`ing the open-r1 repo, you can very quickly get started
 ```python
 >>> from open_r1.puzzles import LinearEquationConfig, LinearEquationTask
 
->>> task = LinearEquationTask()
->>> # Tasks are iterable, so you can iterate with "for question in task:"
->>> question = next(iter(task))
->>> print(question["question"])
-'-2y - 4 = -16'
+>>> config = LinearEquationConfig(seed=123)
+>>> task = LinearEquationTask(config)
+>>> # Tasks are iterable, so you can iterate with "for task_instance in task:"
+>>> task_instance = next(iter(task))
+>>> print(task_instance["prompt"])
+Solve for a in the following equation:
 
+-9a + 2 = 2
 # To score a model output, use task.validate()
->>> task.verify("y = 6", question["answer"])
+>>> task.verify("a = 0", task_instance["ground_truth"])
 1.0
 
 >>> # To control the task difficulty, you can use the task's associated config
->>> config = LinearEquationConfig()
+>>> config = LinearEquationConfig(seed=123)
 >>> config.min_coefficient = -1000
 >>> config.max_coefficient = 1000
 >>> harder_task = LinearEquationTask(config)

@@ -40,19 +40,18 @@ class LinearEquationTask(BaseTask):
         else:
             equation = f"{var_coefficient}{var_name} = {rhs}"
 
-        return {"question": base_text + equation, "ground_truth": var_value}
+        return {"prompt": base_text + equation, "ground_truth": var_value}
 
     @staticmethod
     def verify(output, answer):
-        # If there's only one number in the output, it's the answer
-        numbers = re.findall(r"\d+", output)
-        if len(numbers) == 1:
-            return float(int(numbers[0]) == answer)
-        # If not, look for a pattern like "x = 5" to disambiguate
-        numbers = re.findall(r"=\s+(\d+)", output)
-        if len(numbers) == 1:
-            return float(int(numbers[0].group(1)) == answer)
-        # Finally, maybe it gave the answer as a decimal, so check for that
-        numbers = re.findall(r"\d+\.\d+", output)
-        if len(numbers) == 1:
-            return float(float(numbers[0]) == answer)
+        # Look for number-like sequences
+        numbers = re.findall(r"(\d+|\d+\.\d+)", output)
+        if not numbers:
+            return 0.  # If we can't find a number, it's incorrect
+        try:
+            # We assume the last number in the text is the model's answer, just in case any CoT is in there
+            prediction = float(numbers[-1])
+        except ValueError:
+            return 0.  # If we can't parse a number, it's incorrect
+        return float(prediction == answer)
+
