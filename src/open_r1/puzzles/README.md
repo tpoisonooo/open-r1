@@ -28,7 +28,7 @@ Solve for a in the following equation:
 >>> harder_task = LinearEquationTask(config)
 ```
 
-## Training with puzzles
+## Training with `puzzles`
 
 Training with puzzles is also easy! Puzzles come with a `to_dataset()` method that returns a `Dataset` object. Each
 task instance should have a `ground_truth` key that you can use with the task's `verify` method to get a reward
@@ -53,6 +53,26 @@ trainer = GRPOTrainer(
     train_dataset=dataset,
 )
 trainer.train()
+```
+
+## Using `puzzles` for verification
+
+The verifier method for each task is a static method. This means that you can use the verifier without instantiating
+the task, for example if you want to verify outputs on existing benchmark datasets:
+
+```python
+from datasets import load_dataset
+from open_r1.puzzles import LinearEquationTask
+
+dataset = load_dataset("Rocketknight1/linear_equation_dataset")
+
+scores = []
+for instance in dataset["train"]:
+    # Using a dummy answer of "x = 0" for every question
+    scores.append(LinearEquationTask.verify("x = 0", instance["ground_truth"]))
+
+print("Score:", sum(scores) / len(scores))
+Score: 0.05
 ```
 
 ## Adding new puzzles
