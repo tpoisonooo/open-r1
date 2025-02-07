@@ -33,6 +33,11 @@ WORLD_SIZE=$(($NUM_NODES*$GPUS_PER_NODE))
 CONFIG_FILE=recipes/$MODEL/$TASK/config_$CONFIG_SUFFIX.yaml
 GRAD_ACC_STEPS=$(grep 'gradient_accumulation_steps' $CONFIG_FILE | awk '{print $2}')
 
+# For GRPO we need to reduce $WORLD_SIZE by 1
+if [ "$TASK" == "grpo" ]; then
+    WORLD_SIZE=$(($WORLD_SIZE-1))
+fi
+
 # Split the string into individual arguments
 IFS=' ' read -ra ARGS <<< "$OPTIONAL_ARGS"
 
