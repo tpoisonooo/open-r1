@@ -42,11 +42,11 @@ def build_distilabel_pipeline(
     if top_p is not None:
         generation_kwargs["top_p"] = top_p
 
-    with Pipeline().ray() as pipeline:
+    with Pipeline() as pipeline:
         TextGeneration(
             llm=OpenAILLM(
                 base_url=base_url,
-                api_key="something",
+                api_key="EMPTY",
                 model=model,
                 timeout=timeout,
                 max_retries=retries,

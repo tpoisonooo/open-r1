@@ -1,10 +1,10 @@
 # Model arguments
-model_name_or_path: deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
+model_name_or_path: /data/khj/workspace/open-r1/data/Qwen2.5-1.5B-Open-R1-Distill
 model_revision: main
 torch_dtype: bfloat16
 
 # Data training arguments
-dataset_name: AI-MO/NuminaMath-TIR
+dataset_name: /data/share/NuminaMath-TIR
 dataset_configs:
 - all
 # Num processes is less by 1 as vLLM is using 1 GPU
@@ -14,10 +14,10 @@ num_processes: 7
 bf16: true
 use_vllm: true
 vllm_device: auto
-vllm_gpu_memory_utilization: 0.7
+vllm_gpu_memory_utilization: 0.8
 do_eval: true
 eval_strategy: steps
-eval_steps: 100
+eval_steps: 10
 gradient_accumulation_steps: 16
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
@@ -35,9 +35,9 @@ max_steps: -1
 num_train_epochs: 1
 output_dir: data/Qwen2.5-1.5B-Open-R1-GRPO
 overwrite_output_dir: true
-per_device_eval_batch_size: 4   
-per_device_train_batch_size: 1
-push_to_hub: true
+per_device_eval_batch_size: 4  
+per_device_train_batch_size: 4
+push_to_hub: false
 report_to:
 - wandb
 save_strategy: "no"
