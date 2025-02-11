@@ -172,7 +172,7 @@ def main(script_args, training_args, model_args):
         }
 
     def apply_chat_template(example, tokenizer):
-        example = tokenizer.apply_chat_template(example["messages"], tokenize=False, continue_final_message=True)
+        example = tokenizer.apply_chat_template(example["prompt"], tokenize=False, continue_final_message=True)
         return {"prompt": example}
 
     dataset = dataset.map(make_conversation)
