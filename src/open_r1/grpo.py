@@ -21,7 +21,7 @@ import datasets
 import torch
 import transformers
 from datasets import load_dataset
-from transformers import AutoTokenizer, set_seed
+from transformers import set_seed
 from transformers.trainer_utils import get_last_checkpoint
 
 from open_r1.configs import GRPOConfig
@@ -163,6 +163,7 @@ def main(script_args, training_args, model_args):
 
     # Format into conversation
     def make_conversation(example):
+        # start the assistant with a <think> tag
         return {
             "prompt": [
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -171,17 +172,10 @@ def main(script_args, training_args, model_args):
             ],
         }
 
-    def apply_chat_template(example, tokenizer):
-        example = tokenizer.apply_chat_template(example["prompt"], tokenize=False, continue_final_message=True)
-        return {"prompt": example}
-
     dataset = dataset.map(make_conversation)
     for split in dataset:
         if "messages" in dataset[split].column_names:
             dataset[split] = dataset[split].remove_columns("messages")
-
-    tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
-    dataset = dataset.map(apply_chat_template, fn_kwargs={"tokenizer": tokenizer})
 
     logger.info("*** Initializing model kwargs ***")
     torch_dtype = (
