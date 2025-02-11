@@ -126,7 +126,7 @@ class TestRepetitionPenaltyReward(unittest.TestCase):
     def test_zero_max_penalty_returns_zero(self):
         reward_fn = get_repetition_penalty_reward(ngram_size=2, max_penalty=0.0)
         completions = [[{"content": "this is a test sentence"}]]
-        rewards = reward_fn(completions)    
+        rewards = reward_fn(completions)
         self.assertEqual(rewards, [0.0])
 
     def test_no_repetition(self):
