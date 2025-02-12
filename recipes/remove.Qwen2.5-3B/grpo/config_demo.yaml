@@ -1,43 +1,50 @@
 # Model arguments
-model_name_or_path: /home/data/share/Qwen2.5-1.5B-Instruct
+model_name_or_path: /data/share/Qwen2.5-3B-Instruct
 model_revision: main
 torch_dtype: bfloat16
+bf16: true
+tf32: true
 attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: /data/share/Bespoke-Stratos-17k
+dataset_name: /data/share/TIR-tiny
 dataset_configs:
 - all
-preprocessing_num_workers: 8
+# Num processes is less by 1 as vLLM is using 1 GPU
+num_processes: 7
 
-# SFT trainer config
+# GRPO trainer config
 bf16: true
+beta: 0.001
+use_vllm: true
+vllm_device: auto
+vllm_gpu_memory_utilization: 0.8
 do_eval: true
 eval_strategy: steps
-eval_steps: 100
-gradient_accumulation_steps: 8
+eval_steps: 50
+gradient_accumulation_steps: 16
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
   use_reentrant: false
-hub_model_id: Qwen2.5-1.5B-Open-R1-Distill
+hub_model_id: Qwen2.5-3B-Open-R1-GRPO
 hub_strategy: every_save
-learning_rate: 2.0e-05
+learning_rate: 1.0e-05
 log_level: info
 logging_steps: 5
 logging_strategy: steps
 lr_scheduler_type: cosine
-packing: true
-max_seq_length: 16384
+max_prompt_length: 512
+max_completion_length: 4096
 max_steps: -1
+num_generations: 2
 num_train_epochs: 1
-output_dir: data/Qwen2.5-1.5B-Open-R1-Distill
+output_dir: data/Qwen2.5-3B-Open-R1-GRPO
 overwrite_output_dir: true
-packing: true
-per_device_eval_batch_size: 2
+per_device_eval_batch_size: 4
 per_device_train_batch_size: 1
 push_to_hub: false
 report_to:
 - wandb
 save_strategy: "no"
 seed: 42
-warmup_ratio: 0.1
+warmup_ratio: 0.03
