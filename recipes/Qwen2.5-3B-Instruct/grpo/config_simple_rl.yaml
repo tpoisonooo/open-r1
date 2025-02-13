@@ -1,5 +1,5 @@
 # Model arguments
-model_name_or_path: /home/data/share/Qwen2.5-Math-7B
+model_name_or_path: /home/data/share/Qwen2.5-3B-Instruct
 model_revision: main
 torch_dtype: bfloat16
 attn_implementation: flash_attention_2
@@ -23,7 +23,7 @@ gradient_accumulation_steps: 8
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
   use_reentrant: false
-hub_model_id: Qwen-2.5-7B-Simple-RL
+hub_model_id: Qwen-2.5-3B-Simple-RL
 hub_strategy: every_save
 learning_rate: 3.0e-06
 log_level: info
@@ -33,9 +33,9 @@ lr_scheduler_type: cosine
 max_prompt_length: 512
 max_completion_length: 2048
 max_steps: -1
-num_generations: 7
+num_generations: 5
 num_train_epochs: 1
-output_dir: data/Qwen-2.5-7B-Simple-RL
+output_dir: data/Qwen-2.5-3B-Simple-RL
 overwrite_output_dir: true
 per_device_eval_batch_size: 16
 per_device_train_batch_size: 16
