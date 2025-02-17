@@ -62,7 +62,8 @@ class GRPOScriptArguments(ScriptArguments):
     """
 
     reward_funcs: list[str] = field(
-        default_factory=lambda: ["accuracy", "format"],
+        # default_factory=lambda: ["accuracy", "format"],
+        default_factory=lambda: ["accuracy", "reasoning_steps", "cosine", "repetition_penalty"],
         metadata={
             "help": "List of reward functions. Possible values: 'accuracy', 'format', 'reasoning_steps', 'cosine', 'repetition_penalty', 'length'"
         },
