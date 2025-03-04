@@ -1,11 +1,21 @@
 """Reward functions for GRPO training."""
 
+import json
 import math
 import re
 from typing import Dict
 
 from latex2sympy2_extended import NormalizationConfig
 from math_verify import LatexExtractionConfig, parse, verify
+
+from .utils import is_e2b_available
+
+
+if is_e2b_available():
+    from dotenv import load_dotenv
+    from e2b_code_interpreter import Sandbox
+
+    load_dotenv()
 
 
 def accuracy_reward(completions, solution, **kwargs):
@@ -40,7 +50,11 @@ def accuracy_reward(completions, solution, **kwargs):
                 extraction_mode="first_match",
             )
             # Reward 1 if the content is the same as the ground truth, 0 otherwise
-            reward = float(verify(answer_parsed, gold_parsed))
+            try:
+                reward = float(verify(answer_parsed, gold_parsed))
+            except Exception as e:
+                print(f"verify failed: {e}, answer: {answer_parsed}, gold: {gold_parsed}")
+                reward = 0.0
         else:
             # If the gold solution is not parseable, we reward 1 to skip this example
             reward = 1.0
@@ -51,11 +65,31 @@ def accuracy_reward(completions, solution, **kwargs):
 
 
 def format_reward(completions, **kwargs):
-    """Reward function that checks if the completion has a specific format."""
-    pattern = r"^<think>.*?</think>\s*<answer>.*?</answer>$"
+    """Reward function that checks if the reasoning process is enclosed within <think> and </think> tags, while the final answer is enclosed within <answer> and </answer> tags."""
+    pattern = r"^<think>\n.*?\n</think>\n<answer>\n.*?\n</answer>$"
     completion_contents = [completion[0]["content"] for completion in completions]
     matches = [re.match(pattern, content, re.DOTALL | re.MULTILINE) for content in completion_contents]
     return [1.0 if match else 0.0 for match in matches]
+
+
+def tag_count_reward(completions, **kwargs) -> list[float]:
+    """Reward function that checks if we produce the desired number of think and answer tags associated with `format_reward()`.
+
+    Adapted from: https://gist.github.com/willccbb/4676755236bb08cab5f4e54a0475d6fb#file-grpo_demo-py-L90
+    """
+
+    def count_tags(text: str) -> float:
+        count = 0.0
+        tags = ['<think>', '</think>', '<answer>', '</answer>']
+        for tag in tags:
+            index = text.find(tag)
+            if index != -1:
+                count += 0.25
+                text = text[index+len(tag):]
+        return count
+
+    contents = [completion[0]["content"] for completion in completions]
+    return [count_tags(c) for c in contents]
 
 
 def reasoning_steps_reward(completions, **kwargs):
@@ -75,14 +109,14 @@ def reasoning_steps_reward(completions, **kwargs):
     return [min(1.0, count / 3) for count in matches]
 
 
-def len_reward(completions: list[Dict[str, str]], solutions: list[str], **kwargs) -> float:
+def len_reward(completions: list[Dict[str, str]], solution: list[str], **kwargs) -> float:
     """Compute length-based rewards to discourage overthinking and promote token efficiency.
 
     Taken from from the Kimi 1.5 tech report: https://arxiv.org/abs/2501.12599
 
     Args:
         completions: List of model completions
-        solutions: List of ground truth solutions
+        solution: List of ground truth solutions
 
     Returns:
         List of rewards where:
@@ -93,7 +127,7 @@ def len_reward(completions: list[Dict[str, str]], solutions: list[str], **kwargs
 
     # First check correctness of answers
     correctness = []
-    for content, sol in zip(contents, solutions):
+    for content, sol in zip(contents, solution):
         gold_parsed = parse(
             sol,
             extraction_mode="first_match",
@@ -271,3 +305,96 @@ def get_repetition_penalty_reward(ngram_size: int, max_penalty: float):
         return rewards
 
     return repetition_penalty_reward
+
+
+def extract_code(completion: str) -> str:
+    pattern = re.compile(r"```python\n(.*?)```", re.DOTALL)
+    matches = pattern.findall(completion)
+    extracted_answer = matches[-1] if len(matches) >= 1 else ""
+    return extracted_answer
+
+
+def code_reward(completions, **kwargs) -> list[float]:
+    """Reward function that evaluates code snippets using the E2B code interpreter.
+
+    Assumes the dataset contains a `verification_info` column with test cases.
+    """
+    if not is_e2b_available():
+        raise ImportError(
+            "E2B is not available and required for this reward function. Please install E2B with "
+            "`pip install e2b-code-interpreter` and add an API key to a `.env` file."
+        )
+
+    rewards = []
+    # TODO: add support for other languages in E2B: https://e2b.dev/docs/code-interpreting/supported-languages
+    try:
+        """Returns a reward function that evaluates code snippets in a sandbox."""
+        evaluation_script_template = """
+        import subprocess
+        import json
+
+        def evaluate_code(code, test_cases):
+            passed = 0
+            total = len(test_cases)
+            exec_timeout = 5
+
+            for case in test_cases:
+                process = subprocess.run(
+                    ["python3", "-c", code],
+                    input=case["input"],
+                    text=True,
+                    capture_output=True,
+                    timeout=exec_timeout
+                )
+
+                if process.returncode != 0:  # Error in execution
+                    continue
+
+                output = process.stdout.strip()
+                if output.strip() == case["output"].strip():
+                    passed += 1
+
+            success_rate = (passed / total)
+            return success_rate
+
+        code_snippet = {code}
+        test_cases = json.loads({test_cases})
+
+        evaluate_code(code_snippet, test_cases)
+        """
+        code_snippets = [extract_code(completion[-1]["content"]) for completion in completions]
+        verification_info = kwargs["verification_info"]
+        scripts = [
+            evaluation_script_template.format(
+                code=json.dumps(code), test_cases=json.dumps(json.dumps(info["test_cases"]))
+            )
+            for code, info in zip(code_snippets, verification_info)
+        ]
+        with Sandbox(timeout=30, request_timeout=3) as sbx:
+            for script in scripts:
+                execution = sbx.run_code(script, language=verification_info["language"])
+                try:
+                    output = float(execution.text)
+                except (TypeError, ValueError):
+                    output = 0.0
+                rewards.append(output)
+    except Exception as e:
+        print(f"Error from E2B executor: {e}")
+        rewards = [0.0] * len(completions)
+    return rewards
+
+
+def get_code_format_reward(language: str = "python"):
+    """Format reward function specifically for code responses.
+
+    Args:
+        language: Programming language supported by E2B https://e2b.dev/docs/code-interpreting/supported-languages
+    """
+    pattern = rf"^<think>\n.*?\n</think>\n<answer>\n.*?```{language}.*?```.*?\n</answer>$"
+
+    def code_format_reward(completions, **kwargs):
+        completion_contents = [completion[0]["content"] for completion in completions]
+        matches = [re.match(pattern, content, re.DOTALL | re.MULTILINE) for content in completion_contents]
+        return [1.0 if match else 0.0 for match in matches]
+
+    return code_format_reward

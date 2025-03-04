@@ -27,12 +27,16 @@ from transformers.trainer_utils import get_last_checkpoint
 from open_r1.configs import GRPOConfig
 from open_r1.rewards import (
     accuracy_reward,
+    code_reward,
     format_reward,
+    get_code_format_reward,
     get_cosine_scaled_reward,
     get_repetition_penalty_reward,
     len_reward,
     reasoning_steps_reward,
+    tag_count_reward,
 )
+from open_r1.utils import get_tokenizer
 from open_r1.utils.callbacks import get_callbacks
 from open_r1.utils.wandb_logging import init_wandb_training
 from trl import GRPOTrainer, ModelConfig, ScriptArguments, TrlParser, get_peft_config
@@ -48,7 +52,7 @@ class GRPOScriptArguments(ScriptArguments):
 
     Args:
         reward_funcs (`list[str]`):
-            List of reward functions. Possible values: 'accuracy', 'format', 'reasoning_steps', 'cosine', 'repetition_penalty', 'length'.
+            List of reward functions. Possible values: 'accuracy', 'format', 'format_deepseek', 'reasoning_steps', 'cosine', 'repetition_penalty', 'length', tag_count', 'code', 'code_format'.
         cosine_min_value_wrong (`float`):
             Minimum reward for cosine scaling for wrong answers.
         cosine_max_value_wrong (`float`):
@@ -59,13 +63,15 @@ class GRPOScriptArguments(ScriptArguments):
             Maximum reward for cosine scaling for correct answers.
         cosine_max_len (`int`):
             Maximum length for cosine scaling.
+        code_language (`str`):
+            Language for code format reward.
     """
 
     reward_funcs: list[str] = field(
         # default_factory=lambda: ["accuracy", "format"],
         default_factory=lambda: ["accuracy", "reasoning_steps", "cosine", "repetition_penalty"],
         metadata={
-            "help": "List of reward functions. Possible values: 'accuracy', 'format', 'reasoning_steps', 'cosine', 'repetition_penalty', 'length'"
+            "help": "List of reward functions. Possible values: 'accuracy', 'format', 'format_deepseek', 'reasoning_steps', 'cosine', 'repetition_penalty', 'length', tag_count', 'code', 'code_format'"
         },
     )
     cosine_min_value_wrong: float = field(
@@ -88,7 +94,6 @@ class GRPOScriptArguments(ScriptArguments):
         default=1000,
         metadata={"help": "Maximum length for scaling"},
     )
-
     repetition_n_grams: int = field(
         default=3,
         metadata={"help": "Number of n-grams for repetition penalty reward"},
@@ -97,11 +102,13 @@ class GRPOScriptArguments(ScriptArguments):
         default=-1.0,
         metadata={"help": "Maximum (negative) penalty for for repetition penalty reward"},
     )
-
-
-SYSTEM_PROMPT = (
-    "A conversation between user and assistant. The user asks a question, and the assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., <think> reasoning process here </think><answer> answer here </answer>"
-)
+    code_language: str = field(
+        default="python",
+        metadata={
+            "help": "Language for code format reward. Based on E2B supported languages https://e2b.dev/docs/code-interpreting/supported-languages",
+            "choices": ["python", "javascript", "r", "java", "bash"],
+        },
+    )
 
 def main(script_args, training_args, model_args):
     # Set seed for reproducibility
@@ -144,6 +151,11 @@ def main(script_args, training_args, model_args):
     # Load the dataset
     dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
 
+    ################
+    # Load tokenizer
+    ################
+    tokenizer = get_tokenizer(model_args, training_args)
+
     # Get reward functions
     REWARD_FUNCS_REGISTRY = {
         "accuracy": accuracy_reward,
@@ -161,19 +173,24 @@ def main(script_args, training_args, model_args):
             max_penalty=script_args.repetition_max_penalty,
         ),
         "length": len_reward,
+        "code": code_reward,
+        "code_format": get_code_format_reward(language=script_args.code_language),
+        "tag_count": tag_count_reward,
     }
     reward_funcs = [REWARD_FUNCS_REGISTRY[func] for func in script_args.reward_funcs]
 
     # Format into conversation
     def make_conversation(example):
-        return {
-            "prompt": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": example["problem"]},
-            ],
-        }
+        prompt = []
+
+        if training_args.system_prompt is not None:
+            prompt.append({"role": "system", "content": training_args.system_prompt})
+
+        prompt.append({"role": "user", "content": example["problem"]})
+        return {"prompt": prompt}
 
     dataset = dataset.map(make_conversation)
+
     for split in dataset:
         if "messages" in dataset[split].column_names:
             dataset[split] = dataset[split].remove_columns("messages")
@@ -202,6 +219,7 @@ def main(script_args, training_args, model_args):
         eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
         peft_config=get_peft_config(model_args),
         callbacks=get_callbacks(training_args, model_args),
+        processing_class=tokenizer,
     )
 
     ###############
