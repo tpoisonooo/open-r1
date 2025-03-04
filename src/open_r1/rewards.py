@@ -78,18 +78,33 @@ def tag_count_reward(completions, **kwargs) -> list[float]:
     Adapted from: https://gist.github.com/willccbb/4676755236bb08cab5f4e54a0475d6fb#file-grpo_demo-py-L90
     """
 
-    def count_tags(text: str) -> float:
+    # 正向匹配
+    def count_positive(text: str) -> float:
         count = 0.0
-        tags = ['<think>', '</think>', '<answer>', '</answer>']
-        for tag in tags:
+        positive_pattern = [r'^<think>', r'</think>.*<answer>', r'</answer>$']
+        for pattern in positive_pattern:
+            match = re.search(pattern, text, re.MULTILINE)
+            if match:
+                count += 0.33
+                offset = math.span()[-1]
+                text = text[offset:]
+            else:
+                break
+        return count
+
+    def count_negative(text: str) -> float:
+        count = 0.0
+        negative_tags = ['<think></think>', '<answer></answer>']
+        for tag in negative_tags:
             index = text.find(tag)
             if index != -1:
-                count += 0.25
-                text = text[index+len(tag):]
+                count -= 0.5
+                offset = index + len(tag)
+                text = text[offset:]
         return count
 
     contents = [completion[0]["content"] for completion in completions]
-    return [count_tags(c) for c in contents]
+    return [count_positive(c) + count_negative(c) for c in contents]
 
 
 def reasoning_steps_reward(completions, **kwargs):
@@ -109,6 +124,7 @@ def reasoning_steps_reward(completions, **kwargs):
     return [min(1.0, count / 3) for count in matches]
 
 
+# 第一个 epoch 不开 len_reward
 def len_reward(completions: list[Dict[str, str]], solution: list[str], **kwargs) -> float:
     """Compute length-based rewards to discourage overthinking and promote token efficiency.
 
@@ -187,7 +203,7 @@ def get_cosine_scaled_reward(
     max_value_wrong: float = -0.5,
     min_value_correct: float = 0.5,
     max_value_correct: float = 1.0,
-    max_len: int = 1000,
+    max_len: int = 4096,
 ):
     def cosine_scaled_reward(completions, solution, **kwargs):
         """Reward function that scales based on completion length using a cosine schedule.
