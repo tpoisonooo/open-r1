@@ -86,7 +86,7 @@ def tag_count_reward(completions, **kwargs) -> list[float]:
             match = re.search(pattern, text, re.MULTILINE)
             if match:
                 count += 0.33
-                offset = math.span()[-1]
+                offset = match.span()[-1]
                 text = text[offset:]
             else:
                 break
@@ -189,7 +189,7 @@ def len_reward(completions: list[Dict[str, str]], solution: list[str], **kwargs)
         lambda_val = 0.5 - (length - min_len) / (max_len - min_len)
 
         if is_correct:
-            reward = lambda_val
+            reward = 1.0 + lambda_val
         else:
             reward = min(0, lambda_val)
 
