@@ -324,25 +324,43 @@ class TestRepetitionPenaltyReward(unittest.TestCase):
         """Test tag_count_reward with missing <think> tag."""
         completion = [[{"content": "Some reasoning\n</think>\n<answer>\nThe answer\n</answer>"}]]
         rewards = tag_count_reward(completion)
-        self.assertEqual(rewards[0], 0.75)
+        self.assertEqual(rewards[0], 0)
 
     def test_tag_count_rewards_missing_think_end(self):
         """Test tag_count_reward with missing </think> tag."""
         completion = [[{"content": "<think>\nSome reasoning\n<answer>\nThe answer\n</answer>"}]]
         rewards = tag_count_reward(completion)
-        self.assertEqual(rewards[0], 0.75)
+        self.assertEqual(rewards[0], 0.25)
 
     def test_tag_count_rewards_missing_answer_begin(self):
         """Test tag_count_reward with missing <answer> tag."""
         completion = [[{"content": "<think>\nSome reasoning\n</think>\nThe answer\n</answer>"}]]
         rewards = tag_count_reward(completion)
-        self.assertEqual(rewards[0], 0.75)
+        self.assertEqual(rewards[0], 0.5)
 
     def test_tag_count_rewards_missing_answer_end(self):
         """Test tag_count_reward with missing </answer> tag."""
         completion = [[{"content": "<think>\nSome reasoning\n</think>\n<answer>\nThe answer"}]]
         rewards = tag_count_reward(completion)
         self.assertEqual(rewards[0], 0.75)
+
+    def test_tag_count_rewards_missing_answer_end(self):
+        """Test tag_count_reward with missing </answer> tag."""
+        completion = [[{"content": "<think>..</think>\n<answer>\nThe answer"}]]
+        rewards = tag_count_reward(completion)
+        self.assertEqual(rewards[0], 0.25)
+
+    def test_tag_count_rewards_missing_answer_end(self):
+        """Test tag_count_reward with missing </answer> tag."""
+        completion = [[{"content": "<think>..</think>\n<answer>?</answer>"}]]
+        rewards = tag_count_reward(completion)
+        self.assertEqual(rewards[0], 0.0)
+
+    def test_tag_count_rewards_missing_answer_end(self):
+        """Test tag_count_reward with missing </answer> tag."""
+        completion = [[{"content": "..</think>\n<think>..</think>"}]]
+        rewards = tag_count_reward(completion)
+        self.assertEqual(rewards[0], -0.0)
 
     def test_tag_count_rewards_missing_all_tags(self):
         """Test tag_count_reward with missing all tags."""

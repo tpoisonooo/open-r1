@@ -13,6 +13,3 @@ ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/accelerate_con
 
 # 换 tiny data， 4h
 # 
-
-
-

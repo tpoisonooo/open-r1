@@ -1,11 +1,11 @@
 # Model arguments
-model_name_or_path: Qwen/Qwen2.5-1.5B-Instruct
+model_name_or_path: /data/share/Qwen2.5-1.5B-Instruct
 model_revision: main
 torch_dtype: bfloat16
 attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: open-r1/verifiable-coding-problems-python
+dataset_name: /data/share/verifiable-coding-problems-python
 system_prompt: "You are a helpful AI Assistant that provides well-reasoned and detailed responses. You first think about the reasoning process as an internal monologue and then provide the user with the answer. Respond in the following format: <think>\n...\n</think>\n<answer>\n...\n</answer>"
 
 # GRPO trainer config
@@ -33,7 +33,7 @@ lr_scheduler_kwargs:
 max_prompt_length: 1024
 max_completion_length: 2048
 max_steps: 500
-num_generations: 14
+num_generations: 16
 num_train_epochs: 1
 output_dir: data/Qwen2.5-1.5B-Open-R1-Code-GRPO
 overwrite_output_dir: true

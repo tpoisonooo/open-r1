@@ -82,26 +82,33 @@ def tag_count_reward(completions, **kwargs) -> list[float]:
     # 正向匹配
     def count_positive(text: str) -> float:
         count = 0.0
-        positive_pattern = [r'^<think>', r'</think>.*<answer>', r'</answer>$']
+        positive_pattern = [r'^<think>', r'</think>', r'<answer>', r'</answer>$']
         for pattern in positive_pattern:
             match = re.search(pattern, text, re.MULTILINE)
             if match:
-                count += 0.33
-                offset = match.span()[-1]
-                text = text[offset:]
+                count += 0.25
+                text = text[match.end():]
             else:
                 break
         return count
+    
+    def is_meaningful(content:str) ->  bool:
+        pattern = r'[a-zA-Z\u4e00-\u9fff]'
+        if re.search(pattern, content):
+            return True
+        else:
+            return False
 
     def count_negative(text: str) -> float:
         count = 0.0
-        negative_tags = ['<think></think>', '<answer></answer>']
-        for tag in negative_tags:
-            index = text.find(tag)
-            if index != -1:
+        negative_pattern = [r'<think>(.*?)</think>', r'<answer>(.*?)</answer>']
+        for pattern in negative_pattern:
+            match = re.search(pattern, text)
+            if not match:
+                continue
+            content = match.group(1)
+            if not is_meaningful(content=content):
                 count -= 0.5
-                offset = index + len(tag)
-                text = text[offset:]
         return count
 
     contents = [completion[0]["content"] for completion in completions]
@@ -117,7 +124,7 @@ def reasoning_steps_reward(completions, **kwargs):
         \n\* - matches bullet points with asterisks
         First,|Second,|Next,|Finally, - matches transition words
     """
-    pattern = r"(Step \d+:|^\d+\.|\n-|\n\*|First,|Second,|Next,|Finally,)"
+    pattern = r"(Step \d+:|^\d+\.|\n-|\n\*|First,|Second,|Next,|Finally,|So,|Now,|Since)"
     completion_contents = [completion[0]["content"] for completion in completions]
     matches = [len(re.findall(pattern, content)) for content in completion_contents]
 
@@ -190,7 +197,7 @@ def len_reward(completions: list[Dict[str, str]], solution: list[str], **kwargs)
         lambda_val = 0.5 - (length - min_len) / (max_len - min_len)
 
         if is_correct:
-            reward = 1.0 + lambda_val
+            reward = lambda_val
         else:
             reward = min(0, lambda_val)
 

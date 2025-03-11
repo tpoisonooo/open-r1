@@ -182,10 +182,11 @@ def main(script_args, training_args, model_args):
     # Format into conversation
     def make_conversation(example):
         prompt = []
-
+        # logger.info('------ example keys {}'.format(example.keys()))
         if training_args.system_prompt is not None:
             prompt.append({"role": "system", "content": training_args.system_prompt})
 
+        # prompt.append({"role": "user", "content": example["problem"]})
         prompt.append({"role": "user", "content": example["problem"]})
         return {"prompt": prompt}
 
