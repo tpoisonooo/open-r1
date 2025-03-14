@@ -12,9 +12,9 @@ bash sh/eval_math.sh $PROMPT_TYPE $MODEL_NAME_OR_PATH
 
 /home/khj/workspace/open-r1/data/Qwen-2.5-3B-Simple-RL
 
-export CUDA_VISIBLE_DEVICES="0"
-PROMPT_TYPE="qwen25-math-cot"
-MODEL_NAME_OR_PATH="/home/khj/workspace/open-r1/data/Qwen-2.5-3B-Simple-RL"
+export CUDA_VISIBLE_DEVICES="1"
+export PROMPT_TYPE="qwen25-math-cot"
+export MODEL_NAME_OR_PATH="/home/khj/workspace/open-r1/data/Qwen-2.5-3B-Simple-RL"
 bash sh/eval_math.sh $PROMPT_TYPE $MODEL_NAME_OR_PATH
 
 
