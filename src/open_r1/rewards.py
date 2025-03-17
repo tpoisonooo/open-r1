@@ -17,6 +17,8 @@ if is_e2b_available():
     from e2b_code_interpreter import AsyncSandbox
 
     load_dotenv()
+else:
+    AsyncSandbox = None
 
 
 def accuracy_reward(completions, solution, **kwargs):
@@ -373,7 +375,13 @@ def code_reward(completions, **kwargs) -> list[float]:
                 continue
 
             output = process.stdout.strip()
-            if output.strip() == case["output"].strip():
+
+            # TODO: implement a proper validator to compare against ground truth. For now we just check for exact string match on each line of stdout.
+            all_correct = True
+            for line1, line2 in zip(output.split('\\n'), case['output'].split('\\n')):
+                all_correct = all_correct and line1.strip() == line2.strip()
+
+            if all_correct:
                 passed += 1
 
         success_rate = (passed / total)
@@ -390,8 +398,13 @@ def code_reward(completions, **kwargs) -> list[float]:
         evaluation_script_template.format(code=json.dumps(code), test_cases=json.dumps(json.dumps(info["test_cases"])))
         for code, info in zip(code_snippets, verification_info)
     ]
+
+    language = verification_info[0]["language"]
+
+    if not all(v["language"] == language for v in verification_info):
+        raise ValueError("All verification_info must have the same language", verification_info)
     try:
-        rewards = run_async_from_sync(scripts, verification_info["language"])
+        rewards = run_async_from_sync(scripts, language)
 
     except Exception as e:
         print(f"Error from E2B executor: {e}")
@@ -419,14 +432,12 @@ def get_code_format_reward(language: str = "python"):
 def run_async_from_sync(scripts: list[str], language: str) -> list[float]:
     """Function wrapping the `run_async` function."""
     # Create a new event loop and set it
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
     try:
         # Run the async function and get the result
-        rewards = loop.run_until_complete(run_async(scripts, language))
-    finally:
-        loop.close()
+        rewards = asyncio.run(run_async(scripts, language))
+    except Exception as e:
+        print(f"Error from E2B executor async: {e}")
+        raise e
 
     return rewards
 
@@ -436,7 +447,7 @@ async def run_async(scripts: list[str], language: str) -> list[float]:
     sbx = await AsyncSandbox.create(timeout=30, request_timeout=3)
 
     # Create a list of tasks for running scripts concurrently
-    tasks = [run_script(sbx, script) for script in scripts]
+    tasks = [run_script(sbx, script, language) for script in scripts]
 
     # Wait for all tasks to complete and gather their results as they finish
     results = await asyncio.gather(*tasks)
@@ -448,7 +459,7 @@ async def run_async(scripts: list[str], language: str) -> list[float]:
     return rewards
 
 
-async def run_script(sbx, script: str, language: str) -> float:
+async def run_script(sbx: AsyncSandbox, script: str, language: str) -> float:
     execution = await sbx.run_code(script, language=language)
     try:
         return float(execution.text)
