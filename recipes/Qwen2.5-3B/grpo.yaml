@@ -41,6 +41,23 @@ overwrite_output_dir: true
 per_device_eval_batch_size: 8
 per_device_train_batch_size: 8
 push_to_hub: false
+
+reward_funcs:
+- cosine
+- tag_count
+- reasoning_steps
+- repetition_penalty
+- code
+- code_format
+
+reward_weights:
+- 8
+- 0.5
+- 0.5
+- 1
+- 1
+- 1
+
 report_to:
 - wandb
 save_strategy: "no"

@@ -183,11 +183,14 @@ def main(script_args, training_args, model_args):
     def make_conversation(example):
         prompt = []
         # logger.info('------ example keys {}'.format(example.keys()))
-        if training_args.system_prompt is not None:
+
+        if 'system' in example and example['system']
+            prompt.append({"role": "system", "content": example['system']})
+        elif training_args.system_prompt is not None:
             prompt.append({"role": "system", "content": training_args.system_prompt})
 
         # prompt.append({"role": "user", "content": example["problem"]})
-        prompt.append({"role": "user", "content": example["problem"]})
+        prompt.append({"role": "user", "content": example["problem_statement"]})
         return {"prompt": prompt}
 
     dataset = dataset.map(make_conversation)
@@ -215,6 +218,7 @@ def main(script_args, training_args, model_args):
     trainer = GRPOTrainer(
         model=model_args.model_name_or_path,
         reward_funcs=reward_funcs,
+        reward_mask=script_args.reward_mask,
         args=training_args,
         train_dataset=dataset[script_args.dataset_train_split],
         eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,

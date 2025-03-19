@@ -4,25 +4,24 @@ import asyncio
 import json
 import math
 import re
-from typing import Dict
+from typing import Dict, Tuple
+from loguru import logger
 
 from latex2sympy2_extended import NormalizationConfig
 from math_verify import LatexExtractionConfig, parse, verify
 
-from .utils import is_e2b_available
-
-
-if is_e2b_available():
-    from dotenv import load_dotenv
-    from e2b_code_interpreter import AsyncSandbox
-
-    load_dotenv()
-else:
-    AsyncSandbox = None
-
+from RestrictedPython import compile_restricted
+from RestrictedPython import safe_builtins
+from RestrictedPython import limited_builtins
+from RestrictedPython import utility_builtins
+import subprocess
 
 def accuracy_reward(completions, solution, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth."""
+    train_data_type = kwargs.get('source_type', None)
+    if train_data_type == 'code_python':
+        return 0
+    
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
     for content, sol in zip(contents, solution):
@@ -80,7 +79,10 @@ def tag_count_reward(completions, **kwargs) -> list[float]:
 
     Adapted from: https://gist.github.com/willccbb/4676755236bb08cab5f4e54a0475d6fb#file-grpo_demo-py-L90
     """
-
+    train_data_type = kwargs.get('source_type', None)
+    if train_data_type == 'code_python':
+        return 0
+    
     # 正向匹配
     def count_positive(text: str) -> float:
         count = 0.0
@@ -126,6 +128,10 @@ def reasoning_steps_reward(completions, **kwargs):
         \n\* - matches bullet points with asterisks
         First,|Second,|Next,|Finally, - matches transition words
     """
+    train_data_type = kwargs.get('source_type', None)
+    if train_data_type == 'code_python':
+        return 0
+
     pattern = r"(Step \d+:|^\d+\.|\n-|\n\*|First,|Second,|Next,|Finally,|So,|Now,|Since)"
     completion_contents = [completion[0]["content"] for completion in completions]
     matches = [len(re.findall(pattern, content)) for content in completion_contents]
@@ -149,6 +155,10 @@ def len_reward(completions: list[Dict[str, str]], solution: list[str], **kwargs)
         - For correct answers: reward = 0.5 - (len - min_len)/(max_len - min_len)
         - For incorrect answers: reward = min(0, 0.5 - (len - min_len)/(max_len - min_len))
     """
+    train_data_type = kwargs.get('source_type', None)
+    if train_data_type == 'code_python':
+        return 0
+
     contents = [completion[0]["content"] for completion in completions]
 
     # First check correctness of answers
@@ -232,6 +242,10 @@ def get_cosine_scaled_reward(
             max_value_correct: Maximum reward for correct answers
             max_len: Maximum length for scaling
         """
+        train_data_type = kwargs.get('source_type', None)
+        if train_data_type == 'code_python':
+            return 0
+        
         contents = [completion[0]["content"] for completion in completions]
         rewards = []
 
@@ -284,7 +298,7 @@ def get_cosine_scaled_reward(
     return cosine_scaled_reward
 
 
-def get_repetition_penalty_reward(ngram_size: int, max_penalty: float):
+def get_repetition_penalty_reward(ngram_size: int, max_penalty: float, **kwargs):
     """
     Computes N-gram repetition penalty as described in Appendix C.2 of https://arxiv.org/abs/2502.03373.
     Reference implementation from: https://github.com/eddycmu/demystify-long-cot/blob/release/openrlhf/openrlhf/reward/repetition.py
@@ -293,6 +307,7 @@ def get_repetition_penalty_reward(ngram_size: int, max_penalty: float):
     ngram_size: size of the n-grams
     max_penalty: Maximum (negative) penalty for wrong answers
     """
+
     if max_penalty > 0:
         raise ValueError(f"max_penalty {max_penalty} should not be positive")
 
@@ -308,6 +323,9 @@ def get_repetition_penalty_reward(ngram_size: int, max_penalty: float):
         Args:
             completions: List of model completions
         """
+        train_data_type = kwargs.get('source_type', None)
+        if train_data_type == 'code_python':
+            return 0
 
         contents = [completion[0]["content"] for completion in completions]
         rewards = []
@@ -341,59 +359,62 @@ def extract_code(completion: str) -> str:
 
 
 def code_reward(completions, **kwargs) -> list[float]:
-    """Reward function that evaluates code snippets using the E2B code interpreter.
+    train_data_type = kwargs.get('source_type', None)
+    if train_data_type != 'code_python':
+        return 0
+    
+    evaluation_script_template = """
+import subprocess
+import json
+import math
 
-    Assumes the dataset contains a `verification_info` column with test cases.
-    """
-    if not is_e2b_available():
-        raise ImportError(
-            "E2B is not available and required for this reward function. Please install E2B with "
-            "`pip install e2b-code-interpreter` and add an API key to a `.env` file."
+def evaluate():
+    code = {code}
+    test_cases = json.loads({test_cases})
+    passed = 0
+    total = len(test_cases)
+    exec_timeout = 10
+
+    for case in test_cases:
+        process = subprocess.run(
+            ["python3", "-c", code],
+            input=case["input"],
+            text=True,
+            capture_output=True,
+            timeout=exec_timeout
         )
 
-    # TODO: add support for other languages in E2B: https://e2b.dev/docs/code-interpreting/supported-languages
-    """Returns a reward function that evaluates code snippets in a sandbox."""
-    evaluation_script_template = """
-    import subprocess
-    import json
+        if process.returncode != 0:  # Error in execution
+            continue
 
-    def evaluate_code(code, test_cases):
-        passed = 0
-        total = len(test_cases)
-        exec_timeout = 5
+        output = process.stdout.strip()
 
-        for case in test_cases:
-            process = subprocess.run(
-                ["python3", "-c", code],
-                input=case["input"],
-                text=True,
-                capture_output=True,
-                timeout=exec_timeout
-            )
-
-            if process.returncode != 0:  # Error in execution
+        ##
+        all_correct = True
+        for line1, line2 in zip(output.split('\\n'), case['output'].split('\\n')):
+            line1 = line1.strip()
+            line2 = line2.strip()
+            if line1 == line2:
                 continue
+            # print((line1, line2))
+            try:
+                num1 = float(line1)
+                num2 = float(line2)
+                all_correct = all_correct and math.isclose(num1, num2)
+            except Exception as e:
+                all_correct = False
 
-            output = process.stdout.strip()
+        if all_correct:
+            passed += 1
 
-            # TODO: implement a proper validator to compare against ground truth. For now we just check for exact string match on each line of stdout.
-            all_correct = True
-            for line1, line2 in zip(output.split('\\n'), case['output'].split('\\n')):
-                all_correct = all_correct and line1.strip() == line2.strip()
+    success_rate = (passed / total)
+    return success_rate
 
-            if all_correct:
-                passed += 1
-
-        success_rate = (passed / total)
-        return success_rate
-
-    code_snippet = {code}
-    test_cases = json.loads({test_cases})
-
-    evaluate_code(code_snippet, test_cases)
+result=evaluate()
     """
     code_snippets = [extract_code(completion[-1]["content"]) for completion in completions]
     verification_info = kwargs["verification_info"]
+
     scripts = [
         evaluation_script_template.format(code=json.dumps(code), test_cases=json.dumps(json.dumps(info["test_cases"])))
         for code, info in zip(code_snippets, verification_info)
@@ -403,65 +424,40 @@ def code_reward(completions, **kwargs) -> list[float]:
 
     if not all(v["language"] == language for v in verification_info):
         raise ValueError("All verification_info must have the same language", verification_info)
+    rewards = []
     try:
-        rewards = run_async_from_sync(scripts, language)
+        for script in scripts:
+            local_vars = {}
+            exec(script, globals(), local_vars)
+            score = local_vars.get('result')
+            # if score != 1.0:
+            #     import pdb
+            #     pdb.set_trace()
+            rewards.append(score)
 
     except Exception as e:
-        print(f"Error from E2B executor: {e}")
+        print(f"Error from code sandbox: {e}")
         rewards = [0.0] * len(completions)
 
     return rewards
 
-
-def get_code_format_reward(language: str = "python"):
+def get_code_format_reward(language: str = "python", **kwargs):
     """Format reward function specifically for code responses.
 
     Args:
         language: Programming language supported by E2B https://e2b.dev/docs/code-interpreting/supported-languages
     """
-    pattern = rf"^<think>\n.*?\n</think>\n<answer>\n.*?```{language}.*?```.*?\n</answer>$"
+
+    pattern = rf".*?```{language}.*?```.*?"
 
     def code_format_reward(completions, **kwargs):
+        train_data_type = kwargs.get('source_type', None)
+        if train_data_type != 'code_python':
+            return 0
+    
         completion_contents = [completion[0]["content"] for completion in completions]
         matches = [re.match(pattern, content, re.DOTALL | re.MULTILINE) for content in completion_contents]
         return [1.0 if match else 0.0 for match in matches]
 
     return code_format_reward
 
-
-def run_async_from_sync(scripts: list[str], language: str) -> list[float]:
-    """Function wrapping the `run_async` function."""
-    # Create a new event loop and set it
-    try:
-        # Run the async function and get the result
-        rewards = asyncio.run(run_async(scripts, language))
-    except Exception as e:
-        print(f"Error from E2B executor async: {e}")
-        raise e
-
-    return rewards
-
-
-async def run_async(scripts: list[str], language: str) -> list[float]:
-    # Create the sandbox by hand, currently there's no context manager for this version
-    sbx = await AsyncSandbox.create(timeout=30, request_timeout=3)
-
-    # Create a list of tasks for running scripts concurrently
-    tasks = [run_script(sbx, script, language) for script in scripts]
-
-    # Wait for all tasks to complete and gather their results as they finish
-    results = await asyncio.gather(*tasks)
-    rewards = list(results)  # collect results
-
-    # Kill the sandbox after all the tasks are complete
-    await sbx.kill()
-
-    return rewards
-
-
-async def run_script(sbx: AsyncSandbox, script: str, language: str) -> float:
-    execution = await sbx.run_code(script, language=language)
-    try:
-        return float(execution.text)
-    except (TypeError, ValueError):
-        return 0.0

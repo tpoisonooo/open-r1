@@ -69,6 +69,7 @@ _deps = [
     "trl @ git+http://ghfast.top/https://github.com/huggingface/trl.git@69ad852e5654a77f1695eb4c608906fe0c7e8624",
     "vllm==0.7.2",
     "wandb>=0.19.1",
+    "RestrictedPython"
 ]
 
 # this is a lookup table with items like:
@@ -111,6 +112,7 @@ install_requires = [
     deps["transformers"],
     deps["trl"],
     deps["wandb"],
+    deps["RestrictedPython"]
 ]
 
 setup(
