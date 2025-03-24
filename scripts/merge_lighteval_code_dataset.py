@@ -32,8 +32,6 @@ math_dataset = load_dataset("/home/data/share/MATH-lighteval")
 
 merged_math = [{}] * len(math_dataset['train'])
 for index, m in enumerate(math_dataset['train']):
-    if len(m['solution']) > 4096:
-        continue
     item = {
         'problem_statement':m['problem'],
         'gold_standard_solution':m['solution'],
@@ -42,11 +40,6 @@ for index, m in enumerate(math_dataset['train']):
         'verification_info': None,
         'system': "You are a helpful AI Assistant that provides well-reasoned and detailed responses. You first think about the reasoning process as an internal monologue and then provide the user with the answer. Respond in the following format: <think>\n...\n</think>\n<answer>\n...\n</answer>"
     }
-    if 'There is a tree with N vertices, numbered 1, 2,' in m['problem']:
-        import pdb
-        pdb.set_trace()
-        pass
-
     merged_math[index] = item
 
 print(len(merged_code))
@@ -60,6 +53,8 @@ test_math = [{'problem_statement':m['problem'],
               'system': "You are a helpful AI Assistant that provides well-reasoned and detailed responses. You first think about the reasoning process as an internal monologue and then provide the user with the answer. Respond in the following format: <think>\n...\n</think>\n<answer>\n...\n</answer>"} for m in math_dataset['test']]
 
 train_merged = Dataset.from_list(merged_math + merged_code)
+# train_merged = Dataset.from_list(merged_math)
+
 test_merged = Dataset.from_list(test_math)
 
 dataset_dict = DatasetDict({"train": train_merged, "test": test_merged})

@@ -1,5 +1,5 @@
 # Model arguments
-model_name_or_path: /data/share/Qwen2.5-3B-ColdStart
+model_name_or_path: /data/share/Qwen2.5-3B-Instruct
 model_revision: main
 torch_dtype: bfloat16
 attn_implementation: flash_attention_2
@@ -22,7 +22,7 @@ gradient_accumulation_steps: 8
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
   use_reentrant: false
-hub_model_id: Qwen-2.5-3B-Simple-RL
+hub_model_id: Qwen-2.5-3B-Instuct-Code-Math
 hub_strategy: every_save
 learning_rate: 3.0e-06
 log_completions: true
@@ -36,10 +36,11 @@ max_completion_length: 4096
 max_steps: -1
 num_generations: 4
 num_train_epochs: 2
-output_dir: data/Qwen-2.5-3B-Simple-RL
+output_dir: data/Qwen-2.5-3B-Instuct-Code-Math
 overwrite_output_dir: true
 per_device_eval_batch_size: 12
 per_device_train_batch_size: 8
+# per_device_train_batch_size: 4
 push_to_hub: false
 report_to:
 - wandb
@@ -56,7 +57,7 @@ reward_weights:
 - 0.5
 - 1
 - 1
-- 1
+- 0.5
 save_strategy: "epoch"
 seed: 42
 warmup_ratio: 0.1

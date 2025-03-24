@@ -351,9 +351,13 @@ def get_repetition_penalty_reward(ngram_size: int, max_penalty: float, **kwargs)
 def extract_code(completion: str) -> str:
     pattern = re.compile(r"```python\n(.*?)```", re.DOTALL)
     matches = pattern.findall(completion)
-    extracted_answer = matches[-1] if len(matches) >= 1 else ""
+    if len(matches) >=1:
+        extracted_answer = matches[-1]
+    elif 'input' in completion:
+        extracted_answer = completion
+    else:
+        extracted_answer = ''
     return extracted_answer
-
 
 def code_reward(completions, source_type, verification_info, **kwargs) -> list[float]:
     evaluation_script_template = """
@@ -408,25 +412,22 @@ result=evaluate()
     """
     code_snippets = [extract_code(completion[-1]["content"]) for completion in completions]
     rewards = []
-    try:
-        for code, info, _type in zip(code_snippets, verification_info, source_type):
-            if _type != 'code_python':
-                rewards.append(0.0)
-                continue
+        
+    for code, info, _type in zip(code_snippets, verification_info, source_type):
+        if _type != 'code_python':
+            rewards.append(0.0)
+            continue
 
-            script = evaluation_script_template.format(code=json.dumps(code), test_cases=json.dumps(json.dumps(info["test_cases"])))
+        script = evaluation_script_template.format(code=json.dumps(code), test_cases=json.dumps(json.dumps(info["test_cases"])))
 
-            local_vars = {}
+        local_vars = {}
+        try:
             exec(script, globals(), local_vars)
             score = local_vars.get('result')
-            # if score != 1.0:
-            #     import pdb
-            #     pdb.set_trace()
             rewards.append(score)
-
-    except Exception as e:
-        print(f"Error from code sandbox: {e}")
-        rewards = [0.0] * len(completions)
+        except Exception as e:
+            print(f"Error from code sandbox: {e}")
+            rewards.append(-0.1)
 
     return rewards
 

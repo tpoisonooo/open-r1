@@ -13,12 +13,20 @@ indexes = range(len(train_data))
 print_data = train_data.select(indexes)
 
 for data in print_data:
-    if data['source_type'] == 'math':
+
+    print(str(data)[0:256])
+    if not data['problem_statement']:
+        print('tt')
+        import pdb
         pdb.set_trace()
+        pass
 
-        if '```python' in str(data['gold_standard_solution']):
+    # if data['source_type'] == 'math':
+    #     pdb.set_trace()
 
-            pass
+    #     if '```python' in str(data['gold_standard_solution']):
 
-    print(data.keys())
+    #         pass
+
+    # print(data.keys())
 print('-' * 79)
