@@ -1,7 +1,7 @@
 from datasets import load_dataset, Dataset, DatasetDict
 import random
 
-def random_indexs(code_dataset, random_count: int = 15000):
+def random_indexs(code_dataset, random_count: int = 7500):
     max_len = len(code_dataset)
     assert random_count < max_len
     return random.sample(range(max_len), random_count)
@@ -19,7 +19,7 @@ merged_code = [{
     'gold_standard_solution':code['gold_standard_solution'], 
     'verification_info': code['verification_info'],
     'source_type': 'code_python',
-    'system': ''
+    'system': 'You are a helpful Assistant.'
 } for code in code_dataset]
 
 # 'problem', 'level', 'solution', 'type', source_type
@@ -42,6 +42,11 @@ for index, m in enumerate(math_dataset['train']):
         'verification_info': None,
         'system': "You are a helpful AI Assistant that provides well-reasoned and detailed responses. You first think about the reasoning process as an internal monologue and then provide the user with the answer. Respond in the following format: <think>\n...\n</think>\n<answer>\n...\n</answer>"
     }
+    if 'There is a tree with N vertices, numbered 1, 2,' in m['problem']:
+        import pdb
+        pdb.set_trace()
+        pass
+
     merged_math[index] = item
 
 print(len(merged_code))
@@ -54,7 +59,7 @@ test_math = [{'problem_statement':m['problem'],
               'verification_info': None,
               'system': "You are a helpful AI Assistant that provides well-reasoned and detailed responses. You first think about the reasoning process as an internal monologue and then provide the user with the answer. Respond in the following format: <think>\n...\n</think>\n<answer>\n...\n</answer>"} for m in math_dataset['test']]
 
-train_merged = Dataset.from_list(merged_code + merged_math)
+train_merged = Dataset.from_list(merged_math + merged_code)
 test_merged = Dataset.from_list(test_math)
 
 dataset_dict = DatasetDict({"train": train_merged, "test": test_merged})

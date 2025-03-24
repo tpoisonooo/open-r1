@@ -54,6 +54,7 @@ def accuracy_reward(completions, gold_standard_solution, **kwargs):
             reward = 1.0
             print("Failed to parse gold solution: ", sol)
         rewards.append(reward)
+
     return rewards
 
 
@@ -65,11 +66,14 @@ def format_reward(completions, **kwargs):
     return [1.0 if match else 0.0 for match in matches]
 
 
-def tag_count_reward(completions, source_type, **kwargs) -> list[float]:
+def tag_count_reward(completions, **kwargs) -> list[float]:
     """Reward function that checks if we produce the desired number of think and answer tags associated with `format_reward()`.
 
     Adapted from: https://gist.github.com/willccbb/4676755236bb08cab5f4e54a0475d6fb#file-grpo_demo-py-L90
     """
+    train_data_type = kwargs.get('source_type', None)
+    if train_data_type == 'code_python':
+        return 0
     
     # 正向匹配
     def count_positive(text: str) -> float:
@@ -103,19 +107,11 @@ def tag_count_reward(completions, source_type, **kwargs) -> list[float]:
                 count -= 0.5
         return count
 
-    rewards = []
-    for completion, _type in zip(completions, source_type):
-        if 'code_python' in _type:
-            rewards.append(0.0)
-            continue
-
-        c = completion[0]["content"]
-        score = count_positive(c) + count_negative(c)
-        rewards.append(score)
-    return rewards
+    contents = [completion[0]["content"] for completion in completions]
+    return [count_positive(c) + count_negative(c) for c in contents]
 
 
-def reasoning_steps_reward(completions, source_type, **kwargs):
+def reasoning_steps_reward(completions, **kwargs):
     r"""Reward function that checks for clear step-by-step reasoning.
     Regex pattern:
         Step \d+: - matches "Step 1:", "Step 2:", etc.
@@ -124,21 +120,20 @@ def reasoning_steps_reward(completions, source_type, **kwargs):
         \n\* - matches bullet points with asterisks
         First,|Second,|Next,|Finally, - matches transition words
     """
-    rewards = []
+    train_data_type = kwargs.get('source_type', None)
+    if train_data_type == 'code_python':
+        return 0
+
     pattern = r"(Step \d+:|^\d+\.|\n-|\n\*|First,|Second,|Next,|Finally,|So,|Now,|Since)"
-    for completion, _type in zip(completions, source_type):
-        if 'code_python' in _type:
-            rewards.append(0.0)
-            continue
-        
-        completion_content = completion[0]["content"]
-        count = len(re.findall(pattern, completion_content))
-        rewards.append(min(1.0, count / 3))
-    return rewards
+    completion_contents = [completion[0]["content"] for completion in completions]
+    matches = [len(re.findall(pattern, content)) for content in completion_contents]
+
+    # Magic number 3 to encourage 3 steps and more, otherwise partial reward
+    return [min(1.0, count / 3) for count in matches]
 
 
 # 第一个 epoch 不开 len_reward
-def len_reward(completions: list[Dict[str, str]], gold_standard_solution: list[str], source_type, **kwargs) -> float:
+def len_reward(completions: list[Dict[str, str]], gold_standard_solution: list[str], **kwargs) -> float:
     """Compute length-based rewards to discourage overthinking and promote token efficiency.
 
     Taken from the Kimi 1.5 tech report: https://arxiv.org/abs/2501.12599
@@ -152,16 +147,15 @@ def len_reward(completions: list[Dict[str, str]], gold_standard_solution: list[s
         - For correct answers: reward = 0.5 - (len - min_len)/(max_len - min_len)
         - For incorrect answers: reward = min(0, 0.5 - (len - min_len)/(max_len - min_len))
     """
+    train_data_type = kwargs.get('source_type', None)
+    if train_data_type == 'code_python':
+        return 0
 
     contents = [completion[0]["content"] for completion in completions]
 
     # First check correctness of answers
     correctness = []
-    for content, sol, _type in zip(contents, gold_standard_solution, source_type):
-        if 'code_python' == _type:
-            rewards.append(0.0)
-            continue
-
+    for content, sol in zip(contents, gold_standard_solution):
         gold_parsed = parse(
             sol,
             extraction_mode="first_match",
@@ -223,7 +217,7 @@ def get_cosine_scaled_reward(
     max_value_correct: float = 1.0,
     max_len: int = 4096,
 ):
-    def cosine_scaled_reward(completions, gold_standard_solution, source_type, **kwargs):
+    def cosine_scaled_reward(completions, gold_standard_solution, **kwargs):
         """Reward function that scales based on completion length using a cosine schedule.
 
         Shorter correct solutions are rewarded more than longer ones.
@@ -240,19 +234,17 @@ def get_cosine_scaled_reward(
             max_value_correct: Maximum reward for correct answers
             max_len: Maximum length for scaling
         """
+        train_data_type = kwargs.get('source_type', None)
+        if train_data_type == 'code_python':
+            return 0
+        
         contents = [completion[0]["content"] for completion in completions]
         rewards = []
 
-        for content, sol, _type in zip(contents, gold_standard_solution, source_type):
-            if 'code_python' == _type:
-                rewards.append(float(0.0))
-                continue
-
+        for content, sol in zip(contents, gold_standard_solution):
             gold_parsed = parse(sol, extraction_mode="first_match", extraction_config=[LatexExtractionConfig()])
             if len(gold_parsed) == 0:
                 rewards.append(1.0)  # Skip unparseable examples
-                import pdb
-                pdb.set_trace()
                 print("Failed to parse gold solution: ", sol)
                 continue
 
@@ -355,14 +347,17 @@ def extract_code(completion: str) -> str:
     return extracted_answer
 
 
-def code_reward(completions, source_type, verification_info, **kwargs) -> list[float]:
+def code_reward(completions, **kwargs) -> list[float]:
+    train_data_type = kwargs.get('source_type', None)
+    if train_data_type != 'code_python':
+        return 0
+
     evaluation_script_template = """
+import subprocess
+import json
+import math
 
 def evaluate():
-    import subprocess
-    import json
-    import math
-
     code = {code}
     test_cases = json.loads({test_cases})
     passed = 0
@@ -407,15 +402,20 @@ def evaluate():
 result=evaluate()
     """
     code_snippets = [extract_code(completion[-1]["content"]) for completion in completions]
+    verification_info = kwargs["verification_info"]
+
+    scripts = [
+        evaluation_script_template.format(code=json.dumps(code), test_cases=json.dumps(json.dumps(info["test_cases"])))
+        for code, info in zip(code_snippets, verification_info)
+    ]
+
+    language = verification_info[0]["language"]
+
+    if not all(v["language"] == language for v in verification_info):
+        raise ValueError("All verification_info must have the same language", verification_info)
     rewards = []
     try:
-        for code, info, _type in zip(code_snippets, verification_info, source_type):
-            if _type != 'code_python':
-                rewards.append(0.0)
-                continue
-
-            script = evaluation_script_template.format(code=json.dumps(code), test_cases=json.dumps(json.dumps(info["test_cases"])))
-
+        for script in scripts:
             local_vars = {}
             exec(script, globals(), local_vars)
             score = local_vars.get('result')
@@ -439,19 +439,14 @@ def get_code_format_reward(language: str = "python", **kwargs):
 
     pattern = r".*```python\n.*\n```.*"
 
-    def code_format_reward(completions, source_type, **kwargs):
+    def code_format_reward(completions, **kwargs):
+        train_data_type = kwargs.get('source_type', None)
+        if train_data_type != 'code_python':
+            return 0
+    
+        completion_contents = [completion[0]["content"] for completion in completions]
+        matches = [re.match(pattern, content, re.DOTALL | re.MULTILINE) for content in completion_contents]
+        return [1.0 if match else -0.5 for match in matches]
 
-        rewards = []
-        for completion, _type in zip(completions, source_type):
-            if _type != 'code_python':
-                rewards.append(0.0)
-                continue
-            content = completion[0]["content"]
-            match = re.match(pattern, content, re.DOTALL | re.MULTILINE)
-            if match:
-                rewards.append(1.0)
-            else:
-                rewards.append(-0.5)
-
-        return rewards
     return code_format_reward
+
